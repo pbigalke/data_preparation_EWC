@@ -4,6 +4,9 @@
 # all netcdf files
 *.nc
 
+# all txt files
+*.txt
+
 # nohup output
 **/nohup.out
 
