@@ -89,11 +89,11 @@ def read_mwcch_files_for_study_settings(mwcch_path, years, months, area_threshol
 if __name__ == "__main__":
     # years = np.arange(2006, 2024, 1)
     # months = np.arange(4, 10, 1)
-    mwcch_bucket = mwcch_read.MWCCH_MSGGID_PATH
+    mwcch_bucket = "mwcch-hail-regrid-msg"
     years = np.arange(2006, 2024, 1)
     months = np.arange(4, 10, 1)
     area_threshold = 30
-    files = read_mwcch_files_for_study_settings(mwcch_path, years, months, area_threshold)
+    files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, area_threshold)
     print(len(files))
     for f in files[:10]:
         print(f)
