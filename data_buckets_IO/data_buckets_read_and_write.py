@@ -5,14 +5,13 @@ import boto3
 import os
 import logging
 from botocore.exceptions import ClientError
+from data_buckets_IO.bucket_information import get_bucket_prefix
+from data_buckets_IO.s3_bucket_credentials import S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY, S3_ENDPOINT_URL
 
 # %%
 # method to initialize the S3 client
-def Initialize_s3_client(S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY):
+def Initialize_s3_client():
     """Initialize the S3 client
-    :param S3_ENDPOINT_URL: S3 endpoint URL
-    :param S3_ACCESS_KEY: S3 access key
-    :param S3_SECRET_ACCESS_KEY: S3 secret access key
     :return: S3 client object
     """
     # Initialize the S3 client
@@ -43,12 +42,59 @@ def read_file(s3, file_name, bucket):
         return None
     return myObject
 
+def download_file(s3, file_name, bucket, local_path):
+    """Download a file from an S3 bucket
+
+    :param s3: Initialized S3 client object
+    :param file_name: File to download
+    :param bucket: Bucket to download from
+    :param local_path: Local path to save the downloaded file
+    :return: True if file was downloaded, else False
+    """
+
+    try:
+        with open(local_path, "wb") as f:
+            s3.download_fileobj(bucket, file_name, f)
+    except ClientError as e:
+        logging.error(e)
+        return False
+    return True
+
 def list_objects(s3, S3_BUCKET_NAME):
     # List the objects in our bucket
     response = s3.list_objects(Bucket=S3_BUCKET_NAME)
     for item in response['Contents']:
         print(item['Key'])
     
+def list_objects_within_study_period(s3, S3_BUCKET_NAME, years, months, days):
+    """List all object names within the study period"""
+    
+    all_files = []
+
+    for year in years:
+        for month in months:
+            for day in days:
+                
+                # get prefix for the folder structure in the bucket
+                prefix = get_bucket_prefix(S3_BUCKET_NAME, year, month, day)
+                    
+                # read all objects for the given day
+                response = s3.list_objects_v2(
+                    Bucket=S3_BUCKET_NAME,
+                    Prefix=prefix
+                )
+                if "Contents" not in response:
+                    continue
+
+                # loop over all objects for the given day
+                for obj in response["Contents"]:
+                    key = obj["Key"]
+                    if not key.endswith(".nc"):
+                        continue
+                    
+                    all_files.append(key)
+    
+    return all_files
 
 # %%
 # method to upload data

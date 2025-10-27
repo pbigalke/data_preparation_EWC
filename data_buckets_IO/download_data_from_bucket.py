@@ -4,32 +4,11 @@ import os
 import boto3
 from botocore.exceptions import ClientError
 from s3_bucket_credentials import S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY, S3_ENDPOINT_URL
+from bucket_information import get_bucket_prefix, get_all_bucket_names
+from data_buckets_read_and_write import Initialize_s3_client, read_file, upload_file
 
-BUCKETS = ["expats-msg-training", 'expats-random-msg-timeseries-100pix-8frames', 'mwcch-hail-regrid-msg']
-
-def get_bucket_prefix(bucket_name, year, month, day):
-    """Get the prefix for the given bucket and date
-    :param bucket_name: Name of the S3 bucket
-    :param year: Year of the data
-    :param month: Month of the data
-    :param day: Day of the data
-    :return: Prefix for the S3 objects
-    """
-    if bucket_name == 'expats-random-msg-timeseries-100pix-8frames':
-        return f"output/data/timeseries_crops/{year:04d}/{month:02d}/{day:02d}/MSG_timeseries_{year:04d}-{month:02d}-{day:02d}_"
-    
-    elif bucket_name == 'mwcch-hail-regrid-msg':
-        return f"{year:04d}/{month:02d}/{day:02d}/{year:04d}{month:02d}{day:02d}_"
-    
-    return None
-
-
-s3 = boto3.client(
-    's3',
-    endpoint_url=S3_ENDPOINT_URL,
-    aws_access_key_id=S3_ACCESS_KEY,
-    aws_secret_access_key=S3_SECRET_ACCESS_KEY
-)
+BUCKETS = get_all_bucket_names()
+s3 = Initialize_s3_client(S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY)
 
 # %%
 S3_BUCKET_NAME = 'mwcch-hail-regrid-msg'
