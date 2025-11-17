@@ -36,7 +36,7 @@ def chunk_files_by_timerange(files, n_frames, msg_res, gap=15, start_match="foll
     current_chunk = []
     current_start_time = None
     current_end_time = None
-    timeseries_length = np.timedelta64((n_frames-1)*msg_res, 'm')
+    timeseries_length = np.timedelta64(n_frames-1, 'm') * msg_res
     gap_length = np.timedelta64(gap, 'm')
 
     # loop over all files
@@ -244,19 +244,34 @@ def plot_chunksize_distribution_per_area_thresh(mwcch_path, years, months, n_fra
     plt.show()
     plt.close()
 
-def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_path, years, months, n_frames, msg_res, 
-                                                                     plotpath, area_thresholds, gaps):
-    
+def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_bucket, years, months, n_frames, msg_res, 
+                                                                     plotpath, area_thresholds, gaps, n_rows, n_cols,
+                                                                     vmax=42500, vmin=5000, bin_width=2500):
+
     # find number of subplots needed
     n_subplots = len(area_thresholds)
-    n_cols = np.ceil(np.sqrt(n_subplots)).astype(int)
-    n_rows = np.ceil(n_subplots / n_cols).astype(int)
     
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 15))
+    # create figure and axes
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(3*n_cols, 3*n_rows))
     
-    for t, thresh in enumerate(area_thresholds[:1]):
-        mwcch_files = mwcch_list.read_mwcch_files_for_study_settings(mwcch_path, years, months, thresh)
-        ax = axes[t//2, t%2]
+    for t, thresh in enumerate(area_thresholds):
+        mwcch_files = mwcch_list.read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, thresh)
+        idx_row = t // n_cols
+        idx_col = t % n_cols
+        ax = axes[idx_row, idx_col]
+
+        # create color map
+        cmap = plt.cm.jet  # define the colormap
+        # extract all colors from the .jet map
+        cmaplist = [cmap(i) for i in range(cmap.N)]
+
+        # create the new map
+        cmap = mpl.colors.LinearSegmentedColormap.from_list(
+            'Custom cmap', cmaplist, cmap.N)
+
+        # define the bins and normalize
+        bounds = np.arange(vmin, vmax+1, bin_width)
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
 
         # create container to store total number of chunks
         n_chunks = np.zeros((len(n_frames), len(gaps)))
@@ -265,38 +280,122 @@ def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_path,
         for n, frames in enumerate(n_frames):
             # loop over gaps
             for g, gap in enumerate(gaps):
+                    if t == 0 and g == 0 and n == 0:
+                        print("max number of files:", len(mwcch_files))
 
                     chunks = chunk_files_by_timerange(mwcch_files, frames, msg_res, gap=gap)
                     n_chunks[n, g] = len(chunks)
-                
-        ax.set_title(f"area thresh = {thresh}%")
+
         # plot number of chunks as heatmap with n_frames on y axis and gaps on x axis
-        c = ax.imshow(n_chunks, cmap='viridis', aspect='auto', interpolation='nearest', origin='lower', 
-                      norm=mpl.colors.LogNorm(vmin=1, vmax=500))
-        # plot colorbar
-        fig.colorbar(c, ax=ax, orientation='vertical', label='number of timeseries')
+        c = ax.imshow(n_chunks, cmap=cmap, norm=norm, aspect='auto', interpolation='nearest', origin='lower')
+        
+        # draw title for each subplot
+        ax.set_title(f"area thresh = {thresh}%")
 
         # draw x label if in last row
-        if t//2 == 1:
+        xticks = np.arange(len(gaps)) if msg_res == 15 else np.arange(len(gaps))[::2]
+        if idx_row == n_rows-1:
             ax.set_xlabel("gap between timeseries [min]")
+            ax.set_xticks(xticks, labels=gaps[xticks], rotation=45, ha='center')
+        else:
+            # turn off x tick labels
+            ax.set_xticks(xticks, labels=[])
 
         # draw y label if in first column
-        if t%2 == 0:
+        yticks = np.arange(len(n_frames))[::2]
+        if idx_col == 0:
             ax.set_ylabel("number of frames")
+            ax.set_yticks(yticks, labels=n_frames[yticks])
+        else:
+            # turn off y ticks
+            ax.set_yticks(yticks, labels=[])
 
-        # draw second y axis for corresponding timeseries length in minutes in last column
-        if t%2 == n_cols-1:
+        # draw second y axis for corresponding timeseries length in minutes in last column and last subplot
+        if idx_col == n_cols-1 or t == n_subplots-1:
             ax2 = ax.twinx()
             ax2.set_ylabel("timeseries length [min]")
-            ax2.set_yticks(n_frames, labels=n_frames*msg_res)
+            ax2.set_yticks(yticks, labels=n_frames[yticks] * msg_res)
+        else:
+            # turn off y ticks
+            ax2 = ax.twinx()
+            ax2.set_yticks(yticks, labels=[])
 
     # turn off subplots that are not used
     for i in range(n_subplots, n_rows*n_cols):
         ax = axes[i//n_cols, i%n_cols]
         ax.axis('off')
+        # draw colorbar here
+        fig.colorbar(c, ax=ax, orientation='vertical', label='number of timeseries')
 
     if plotpath is not None:
-        plt.savefig(f"{plotpath}/chunking_mwcch_files_per_areathresh_for_diff_gaps.png")
+        plt.savefig(f"{plotpath}/num_timeseries_per_areathresh_nframes_gap_res{res}_years{years[0]}-{years[-1]}.png")
+        plt.close()
+    else:
+        plt.show()
+        plt.close()
+
+def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_for_specific_areathresh(mwcch_bucket, years, months, n_frames, msg_res, 
+                                                                     plotpath, area_thresh, gaps, vmax=42500, vmin=5000, bin_width=2500):    
+    # create figure and axes
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10))
+
+    mwcch_files = mwcch_list.read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_thresh)
+
+    # create color map
+    cmap = plt.cm.jet  # define the colormap
+    # extract all colors from the .jet map
+    cmaplist = [cmap(i) for i in range(cmap.N)]
+
+    # create the new map
+    cmap = mpl.colors.LinearSegmentedColormap.from_list(
+        'Custom cmap', cmaplist, cmap.N)
+
+    # define the bins and normalize
+    bounds = np.arange(vmin, vmax+1, bin_width)
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+    # create container to store total number of chunks
+    n_chunks = np.zeros((len(n_frames), len(gaps)))
+
+    # loop over number of frames
+    for n, frames in enumerate(n_frames):
+        # loop over gaps
+        for g, gap in enumerate(gaps):
+                # get number of chunks
+                chunks = chunk_files_by_timerange(mwcch_files, frames, msg_res, gap=gap)
+                n_chunks[n, g] = len(chunks)
+
+    # plot number of chunks as heatmap with n_frames on y axis and gaps on x axis
+    c = ax.imshow(n_chunks, cmap=cmap, norm=norm, aspect='auto', interpolation='nearest', origin='lower')
+
+    # write number on chunks in each cell
+    for i in range(len(n_frames)):
+        for j in range(len(gaps)):
+            ax.text(j, i, int(n_chunks[i, j]), ha='center', va='center', color='white')
+    
+    # draw title for each subplot
+    ax.set_title(f"area thresh = {area_thresh}%, msg res = {msg_res}min")
+
+    # draw x label if in last row
+    xticks = np.arange(len(gaps)) if msg_res == 15 else np.arange(len(gaps))[::2]
+    ax.set_xlabel("gap between timeseries [min]")
+    ax.set_xticks(xticks, labels=gaps[xticks], rotation=45, ha='center')
+
+    # draw y label if in first column
+    yticks = np.arange(len(n_frames))[::2]
+    ax.set_ylabel("number of frames")
+    ax.set_yticks(yticks, labels=n_frames[yticks])
+
+    # draw second y axis for corresponding timeseries length in minutes in last column and last subplot
+    ax2 = ax.twinx()
+    ax2.set_ylabel("timeseries length [min]")
+    ax2.set_yticks(yticks, labels=n_frames[yticks] * msg_res)
+
+    # draw colorbar with an offset so that it does not overlap with the second y axis
+    fig.colorbar(c, ax=ax, orientation='vertical', label='number of timeseries', pad=0.1)
+
+    if plotpath is not None:
+        plt.savefig(f"{plotpath}/num_timeseries_areathresh{area_thresh}_nframes_gap_res{res}_years{years[0]}-{years[-1]}.png")
         plt.close()
     else:
         plt.show()
@@ -305,14 +404,16 @@ def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_path,
 # %%
 if __name__ == "__main__":
 
-    mwcch_path = mwcch_read.MWCCH_MSGGRID_PATH
-    plotpath = None #"/net/merisi/pbigalke/plots/data_investigation/constructing_dataset/chunking_MWCCH_files"
+    mwcch_bucket = "mwcch-hail-regrid-msg"
+    plotpath = "plots" #"/net/merisi/pbigalke/plots/data_investigation/constructing_dataset/chunking_MWCCH_files"
     # if not os.path.exists(plotpath):
     #     os.makedirs(plotpath)
 
     # study period settings
-    years = [2022]
-    months = [6]
+    # years = np.arange(2013, 2024, 1)
+    years = np.arange(2006, 2024, 1)
+    months = np.arange(4, 10, 1)
+    days = np.arange(1, 32, 1)
 
     # time series settings
     msg_res = [5, 15]
@@ -320,18 +421,20 @@ if __name__ == "__main__":
 
     # area thresholds and gaps to test
     area_thresholds = np.arange(0, 70, 10)
-    
-    start_match="following"
-    chunk_match="previous"
-
 
     ###### plot chunking of MWCCH files per number of frames and gap for different area thresholds #######
-    for res in msg_res[:1]:
-        n_frames = duration_min / res
-        gaps = np.arange(-30, 30, res)
+    for res in msg_res:
+        n_frames = np.array(duration_min / res).astype(int)
+        gaps = np.arange(-30, 30+res, res)
 
-        plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_path, years, months, n_frames, res, 
-                                                                        plotpath, area_thresholds, gaps)
+        # plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_bucket, years, months, n_frames, res, 
+        #                                                                 plotpath, area_thresholds, gaps, n_rows=2, n_cols=4,
+        #                                                                 vmax=42500, vmin=5000, bin_width=2500)
+
+        for thresh in area_thresholds:
+             plot_number_of_MWCCH_chunks_over_n_frames_and_gap_for_specific_areathresh(mwcch_bucket, years, months, n_frames, res, 
+                                                                     plotpath, thresh, gaps, vmax=42500, vmin=5000, bin_width=2500)
+
 
     # ###### plot chunking of MWCCH files per gap for different area thresholds #######
     # plot_number_of_MWCCH_chunks_over_gap_per_areathresh(mwcch_path, years, months, n_frames, msg_res, plotpath, 
@@ -345,5 +448,4 @@ if __name__ == "__main__":
     # # ####### plot chunk size per area thresh #######
     # for n_frames in np.arange(4, 9, 1):
     #     plot_chunksize_distribution_per_area_thresh(mwcch_path, years, months, n_frames, msg_res, plotpath, area_thresholds)
-
 # %%
