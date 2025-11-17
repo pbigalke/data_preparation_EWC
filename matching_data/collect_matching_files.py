@@ -127,12 +127,12 @@ def get_closest_MSG_timestamps(npdatetime, which="closest", msg_res=15):
     def process_timestamp(npdatetime):
         if which == "previous" or which == "both":
             # Round down to the nearest 15-minute interval
-            rounded_down = pd.Timestamp(npdatetime).floor(f'{msg_res}T')
+            rounded_down = pd.Timestamp(npdatetime).floor(f'{msg_res}min')
             return rounded_down.to_datetime64()
 
         elif which == "following" or which == "both":
             # Round up to the nearest 15-minute interval
-            rounded_up = pd.Timestamp(npdatetime).ceil(f'{msg_res}T')
+            rounded_up = pd.Timestamp(npdatetime).ceil(f'{msg_res}min')
             return rounded_up.to_datetime64()
         
         else:

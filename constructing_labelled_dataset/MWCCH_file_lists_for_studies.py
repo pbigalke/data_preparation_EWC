@@ -4,7 +4,6 @@ import os
 import sys
 sys.path.append("..")
 import readers.read_processed_MWCC_H as mwcch_read
-import matching_data.collect_matching_files as match
 from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client, list_objects_within_study_period, download_file
 # get current directory
 dir_name = os.path.dirname(__file__)
@@ -108,20 +107,18 @@ if __name__ == "__main__":
     # years = np.arange(2006, 2024, 1)
     # months = np.arange(4, 10, 1)
     mwcch_bucket = "mwcch-hail-regrid-msg"
-    # years = np.arange(2013, 2024, 1)
+    years = np.arange(2006, 2024, 1)
     months = np.arange(4, 10, 1)
     days = np.arange(1, 32, 1)
     area_thresholds = np.arange(0, 70, 10)
 
-    for years in [np.arange(2013, 2024, 1), np.arange(2006, 2024, 1)]:
-        create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
+    # for years in [np.arange(2013, 2024, 1), np.arange(2006, 2024, 1)]:
+    #     create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
 
-    # for area_threshold in area_thresholds[2:3]:
-    #     files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold)
-    #     if files is None:
-    #         continue
-    #     print(len(files))
-    #     for f in files[:10]:
-    #         print(f)
+    for area_threshold in area_thresholds:
+        files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold)
+        if files is None:
+            continue
+        print("area threshold:", area_threshold, "# files:", len(files))
 
 # %%

@@ -4,8 +4,9 @@
 # all netcdf files
 *.nc
 
-# all txt files
+# all txt and png files
 *.txt
+*.png
 
 # nohup output
 **/nohup.out
