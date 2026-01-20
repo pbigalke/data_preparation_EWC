@@ -1,3 +1,4 @@
+# Script to save all bucket names and their respective file path prefixes
 
 def get_all_bucket_names():
     """Get all bucket names used in the project

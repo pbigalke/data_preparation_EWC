@@ -1,16 +1,16 @@
-# script to upload MSG timeseries data to the data bucket
+# script to download data set from any S3 bucket
 # %%
 import os
 import boto3
 from botocore.exceptions import ClientError
 from s3_bucket_credentials import S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY, S3_ENDPOINT_URL
-from bucket_information import get_bucket_prefix, get_all_bucket_names
-from data_buckets_read_and_write import Initialize_s3_client, read_file, upload_file
+from data_buckets_read_and_write import Initialize_s3_client
 
-BUCKETS = get_all_bucket_names()
+# initialize S3 client
 s3 = Initialize_s3_client(S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY)
 
 # %%
+# define parameters for data download
 S3_BUCKET_NAME = 'mwcch-hail-regrid-msg'
 
 outpath = None #'/data/crops/dcv2_ir108_100x100_1k_clips_8frame/nc/1'

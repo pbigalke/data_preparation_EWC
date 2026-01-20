@@ -51,7 +51,6 @@ def download_file(s3, file_name, bucket, local_path):
     :param local_path: Local path to save the downloaded file
     :return: True if file was downloaded, else False
     """
-
     try:
         with open(local_path, "wb") as f:
             s3.download_fileobj(bucket, file_name, f)
@@ -61,14 +60,24 @@ def download_file(s3, file_name, bucket, local_path):
     return True
 
 def list_objects(s3, S3_BUCKET_NAME):
+    """List all object names in the S3 bucket (actually only lists first 1000 objects)
+    :param s3: Initialized S3 client object
+    :param S3_BUCKET_NAME: Name of the S3 bucket
+    """
     # List the objects in our bucket
     response = s3.list_objects(Bucket=S3_BUCKET_NAME)
     for item in response['Contents']:
         print(item['Key'])
     
 def list_objects_within_study_period(s3, S3_BUCKET_NAME, years, months, days):
-    """List all object names within the study period"""
-    
+    """List all object names within the study period
+    :param s3: Initialized S3 client object
+    :param S3_BUCKET_NAME: Name of the S3 bucket
+    :param years: List of years
+    :param months: List of months
+    :param days: List of days
+    :return: List of object names
+    """
     all_files = []
 
     for year in years:

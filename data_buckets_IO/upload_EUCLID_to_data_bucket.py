@@ -1,4 +1,4 @@
-# script to upload MSG timeseries data to the data bucket
+# script to upload EUCLID data to the data bucket
 
 # %%
 import time
