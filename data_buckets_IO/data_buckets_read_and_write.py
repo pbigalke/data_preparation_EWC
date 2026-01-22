@@ -28,15 +28,15 @@ def Initialize_s3_client():
 def read_file(s3, file_name, bucket):
     """reading a file from an S3 bucket
     :param s3: Initialized S3 client object
-    :param file_name: File to upload
-    :param bucket: Bucket to upload to
-    :return: object if file was uploaded, else False
+    :param file_name: File to read
+    :param bucket: Bucket to read from
+    :return: object if file was read, else None
     """
     try:
         #with open(file_name, "rb") as f:
         obj = s3.get_object(Bucket=bucket, Key=file_name)
-        #print(obj)
-        myObject = obj['Body'].read().decode('utf-8')
+        print(obj)
+        myObject = obj['Body'].read()#.decode('utf-8')
     except ClientError as e:
         logging.error(e)
         return None
