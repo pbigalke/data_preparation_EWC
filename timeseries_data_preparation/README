@@ -1,0 +1,69 @@
+These scripts can be used for generating a timeseries dataset from MSG files.
+The different files have the following usages.
+
+crop_MSG_timeseries.py
+-> script to crop and save timeseries from MSG files contained in EWC data bucket.
+
+upload_MSG_timeseries_to_data_bucket.py 
+-> script to automatically upload the generated timeseries to a dedicated EWC data bucket 
+(needs to be created first).
+
+download_MSG_timeseries_from_data_bucket.py
+-> script to automatically download the generated timeseries from the dedicated EWC data bucket 
+when you need them for training.
+
+
+
+-------- How to run the timeseries cropping script --------
+
+The script crop_MSG_timeseries.py can be run as a standalone script.
+You need to specify the years, months, and days for which you want to generate timeseries
+from the MSG data stored in the EWC S3 bucket.
+
+All the parameters for the timeseries generation are specified in the main section of the script
+(around line 330). You can modify them as needed.
+
+Parameter descriptions:
+- years: List of years to process.
+- months: List of months to process.
+- days: List of days to process.
+- bucket_name: Name of the S3 bucket containing the MSG data.
+- n_frames: Number of frames in each timeseries sample.
+- max_daily_offset: Maximum random offset (as a fraction of n_frames; between 0 and 1) to introduce randomness
+  in the starting times of the timeseries in the beginning of each day.
+- cropsize: Size of the spatial crop (in pixels).
+- max_spatial_overlap: Maximum allowed overlap (as a fraction of cropsize; between 0 and 1) between different
+  spatial crops to ensure diversity.
+- max_cropping_attempts: Maximum number of attempts to find a valid crop without NaN values.
+- out_path: Directory where the generated timeseries crops will be saved.
+- out_basename: Base name for the output files.
+- verbose: If True, prints progress information.
+
+
+The main function to generate the timeseries dataset is
+construct_timeseries_dataset(bucket_name, years, months, days, 
+                             n_frames=8, max_daily_offset=None, 
+                             cropsize=100, max_spatial_overlap=0.25, max_cropping_attempts=10, 
+                             out_path=None, out_basename=None, 
+                             verbose=True)
+in crop_MSG_timeseries.py
+
+
+
+-------- General procedure of construct_timeseries_dataset --------
+
+- For each specified day, the script retrieves the MSG data from the S3 bucket.
+- The starting time is randomly selected if max_daily_offset is specified.
+- A while loop iterates through the day to extract timeseries samples.
+- In each iteration:
+    - It searches for a time window of the specified number of frames that does not contain NaN values.
+    - If a valid time window is found, it randomly selects spatial crops of the specified size 
+      within each quadrant, ensuring that the crops do not exceed the maximum allowed overlap among each other.
+    - For each crop, the cloud mask is added as an additional parameter, as well as applied to the 10.8 µm channel (IR_108_cm).
+    - The valid timeseries crops are then saved to the specified output directory with the given base name. 
+- If the found timeseries window has not enough timestamps then we reached the end of the data 
+  contained in the daily file. This trailing timeseries is kept for the next day processing.
+- When moving on to the next day, if there is a trailing timeseries from the previous day, 
+  it is prepended to the data of the new day to ensure continuity.
+- The process continues until all specified days have been processed.
+
