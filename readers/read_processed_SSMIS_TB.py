@@ -3,7 +3,7 @@ import xarray as xr
 import sys
 sys.path.append("..")
 # import my own script
-import matching_data.collect_matching_files as clct
+import helpers.collect_matching_files as clct
 
 
 # %%

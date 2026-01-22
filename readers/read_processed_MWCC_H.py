@@ -6,7 +6,7 @@ import re
 import os
 import sys
 sys.path.append("..")
-import matching_data.collect_matching_files as clct
+import helpers.collect_matching_files as clct
 import helpers.datetime_helper as hlp
 
 MWCCH_PATH = "/data/sat/products/PMW_sats/MWCCH_hail_probability/netcdf"
@@ -206,7 +206,7 @@ def generate_mwcch_filepath(path, start_dt, end_dt, detector, satellite, suffix=
 # %%
 if __name__ == '__main__':
     import numpy as np
-    # test on exaple file
+    # test on example file
     example_file = "mhs_METOPB_20230724-S1905-E2046_056289"
     satellite = 'METOPB'
     
