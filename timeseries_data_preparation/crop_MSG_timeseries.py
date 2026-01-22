@@ -238,19 +238,18 @@ def construct_timeseries_dataset(bucket_name, years, months, days,
     start_time_script = time.time()
     # count days to estimate later runtime per day
     count_days = 0
+    # object to store trailing timeseries of each day to process with next day
+    from_previous_day = None
 
     # loop over years
     for year in years:
-        print(f"\n\nProcessing year {year}...", flush=True)
-        # dataset to store the last timeseries of each day
-        # if the last timeseries of the previous day was not complete, we need to add it to the first timeseries of the next day
-        from_previous_day = None
-
+        print(f"\nProcessing year {year}...", flush=True)
         # loop over months and days
         for month in months:
             print(f"\nProcessing month {month}...", flush=True)
             # loop over days
             for day in days:
+
                 # get filename of this day
                 file = f"{get_bucket_prefix(bucket_name, year, month, day)}.nc"
                 print(file, flush=True)
@@ -272,9 +271,6 @@ def construct_timeseries_dataset(bucket_name, years, months, days,
                         # no trailing data of previous day 
                         # -> if max_daily_offset is given generate random offset for first timeseries of the day to increase variability
                         start_time = 0 if max_daily_offset is None else random.randint(0, round(max_daily_offset*n_frames)+1)
-
-                        if verbose:
-                            print("random start time index", start_time, ds_day.isel(time=start_time).time.values, flush=verbose)
 
                         # loop over until the end of the day
                         while start_time < len(ds_day.time.values):
@@ -325,9 +321,7 @@ if __name__ == "__main__":
     print('Initializing S3 client for accessing Data Bucket...')
     s3 = Initialize_s3_client()
 
-    # which channel to use
-    CHANNEL = 'IR_108'
-    VMIN, VMAX = 200, 300
+    # name of the S3 bucket with MSG data
     S3_BUCKET_NAME = 'expats-msg-training' 
 
     #Directory with the data to upload
@@ -348,6 +342,7 @@ if __name__ == "__main__":
     out_path = "output/data/timeseries_crops"
     out_basename = "MSG_timeseries"
 
+    # prints progress information if true
     verbose = True
 
     # run preparation of timeseries dataset
