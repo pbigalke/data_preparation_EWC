@@ -6,7 +6,8 @@ def get_all_bucket_names():
     """
     return [
         'expats-random-msg-timeseries-100pix-8frames',
-        'mwcch-hail-regrid-msg'
+        'mwcch-hail-regrid-msg',
+        'expats-msg-training'
     ]
 
 def get_bucket_prefix(bucket_name, year, month, day):
@@ -22,5 +23,9 @@ def get_bucket_prefix(bucket_name, year, month, day):
     
     elif bucket_name == 'mwcch-hail-regrid-msg':
         return f"{year:04d}/{month:02d}/{day:02d}/{year:04d}{month:02d}{day:02d}_"
+    
+    elif bucket_name == 'expats-msg-training':
+        path_dir = "/data/sat/msg/ml_train_crops/IR_108-WV_062-CMA_FULL_EXPATS_DOMAIN"
+        return f"{path_dir}/{year:04d}/{month:02d}/merged_MSG_CMSAF_{year:04d}-{month:02d}-{day:02d}"
     
     return None
