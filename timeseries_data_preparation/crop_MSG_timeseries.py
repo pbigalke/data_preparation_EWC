@@ -1,3 +1,6 @@
+# This script crops out random timeseries samples from MSG data stored in an S3 bucket
+# The crops are taken from 4 quadrants of the full MSG domain
+
 # %%
 import io
 import xarray as xr
@@ -6,22 +9,16 @@ import time
 import numpy as np
 from scipy.ndimage import binary_closing
 import os
-from s3_bucket_credentials import S3_BUCKET_NAME, S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY, S3_ENDPOINT_URL
-from data_buckets_read_and_write import read_file, Initialize_s3_client
+import sys
+sys.path.append('..')
+from data_buckets_IO.data_buckets_read_and_write import read_file, Initialize_s3_client
+from data_buckets_IO.bucket_information import get_bucket_prefix
 
 # %%
-# Initialize the S3 client (bucket)
-print('Initializing S3 client for accessing Data Bucket...')
-s3 = Initialize_s3_client(S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_ACCESS_KEY)
-
-# which channel to use
-CHANNEL = 'IR_108'
-VMIN, VMAX = 200, 300
-
-# %%
-# methods to select crops and save them
-def search_timewindow_without_nan(ds_day, start_time, n_frames):
+# methods used to select crops and save them 
+def search_timewindow_without_nan(ds_day, start_time, n_frames, verbose=False):
     """Search for a timeseries window without NaN values in the dataset
+
     :param ds_day: Dataset for the current day
     :param start_time: Start time of the timeseries window
     :param n_frames: Number of frames in the timeseries window
@@ -145,7 +142,7 @@ def apply_closing_on_cloud_mask(cloud_mask):
 
     return cloud_mask
 
-def add_parameters_with_applied_closed_cm(crop_timeseries, vmax=VMAX):
+def add_parameters_with_applied_closed_cm(crop_timeseries, vmax=300):
     """Apply the closed cloud mask to the IR_108 channel and save it in the dataset as new variable
     :param crop_timeseries: xarray dataset of the cropped timeseries
     :param vmax: Maximum value for the IR_108 channel
@@ -165,6 +162,7 @@ def add_parameters_with_applied_closed_cm(crop_timeseries, vmax=VMAX):
 
 def crop_and_save_from_all_quadrants(ds_timeseries, cropsize, max_spatial_overlap, out_path, out_basename, max_cropping_attempts=10, verbose=False):
     """Crop out random samples from all quadrants and save them as netcdf
+
     :param ds_timeseries: xarray dataset of the timeseries window
     :param cropsize: Size of the crops
     :param max_spatial_overlap: Maximum allowed overlap of the crops among each other as fraction of the cropsize
@@ -186,82 +184,56 @@ def crop_and_save_from_all_quadrants(ds_timeseries, cropsize, max_spatial_overla
             # apply cm
             crop_timeseries_cm = add_parameters_with_applied_closed_cm(crop_timeseries)
 
-            # get the date and time of the first timestamp in the timeseries
-            date_str, time_str = str(crop_timeseries_cm.time.values[0]).split('T')
-            year, month, day = date_str.split('-')
+            if out_path is None or out_basename is None:
+                # outpath or basename not given - do not save crops and send warning
+                print("WARNING: No output path or basename given - not saving crops.", flush=True)
 
-            # output_folder for this day
-            output_folder = f"{out_path}/{year}/{month}/{day}"
-            os.makedirs(output_folder, exist_ok=True)
-            
-            # generate file name
-            filepath_to_save = f"{output_folder}/{out_basename}_{year}-{month}-{day}_{time_str[:2]}{time_str[3:5]}_crop{2*i+j}.nc"
+            else:
+                # get the date and time of the first timestamp in the timeseries
+                date_str, time_str = str(crop_timeseries_cm.time.values[0]).split('T')
+                year, month, day = date_str.split('-')
 
-            # save crop to a netcdf file
-            crop_timeseries_cm.to_netcdf(filepath_to_save, mode='w')
-            
-            if verbose:
-                print(f"saved after {n_attempts} attempts to: ", filepath_to_save, flush=verbose)
+                # output_folder for this day
+                output_folder = f"{out_path}/{year}/{month}/{day}"
+                os.makedirs(output_folder, exist_ok=True)
+                
+                # generate file name
+                filepath_to_save = f"{output_folder}/{out_basename}_{year}-{month}-{day}_{time_str[:2]}{time_str[3:5]}_crop{2*i+j}.nc"
 
-def process_trailing_timeseries_of_previous_day(from_previous_day, ds_day, n_frames, 
-                                                cropsize, max_spatial_overlap, out_path, out_basename, 
-                                                max_cropping_attempts=10, verbose=False):
-    """Process the trailing timeseries of the previous day
-    :param from_previous_day: Dataset of the trailing timeseries of the previous day
-    :param ds_day: Dataset of the current day
-    :param n_frames: Number of frames in the timeseries window
-    :param cropsize: Size of the crops
-    :param maxoverlap: Maximum allowed overlap of the crops among each other as fraction of the cropsize
-    :param out_path: Path to save the crops
-    :param out_basename: Basename for the output files
-    :param max_cropping_attempts: Maximum number of attempts to find a crop without NaN values
-    :param verbose: If True, print the filename of each crop
-
-    :return: from_previous_day: Dataset of the trailing timeseries of the previous day set back to None
-             next_start_time: Start time of the next timeseries window
-    """
-    # add the trailing timeseries of the previous day to the current day data and slice timeseries
-    ds_timeseries = xr.concat([from_previous_day, ds_day], dim='time').isel(time=slice(0, n_frames))
-    if verbose:
-        print("\n", ds_timeseries.time.values[0], ds_timeseries.time.values[-1], flush=verbose)
-
-    # check at each timestamp if all data is NaN, i.e. MSG timestamp is missing
-    is_all_nan = ds_timeseries[CHANNEL].isnull().all(dim=['lat', 'lon'])
-    if verbose:
-        print("missing timestamps:", is_all_nan.values, flush=verbose)
-
-    # process this timeseries if it is complete before moving on with the normal processing of the next day
-    if not is_all_nan.any():
-
-        # crop out random samples from all quadrants given size and save them as netcdf
-        crop_and_save_from_all_quadrants(ds_timeseries, cropsize, max_spatial_overlap, out_path, out_basename, 
-                                         max_cropping_attempts=max_cropping_attempts, verbose=verbose)
-        
-        # generate random offset for next timeseries of the day to increase variability
-        # make sure that there is only small overlap with trailing timeseries of previous day
-        earliest_start = max(int(n_frames - max_spatial_overlap*n_frames - len(from_previous_day.time.values)), 0)
-        next_start_time = random.randint(earliest_start, int(n_frames-1))
-        if verbose:
-            print(f"random start time of next timeseries between {earliest_start} and {int(n_frames-1)}", next_start_time, flush=verbose)
-
-    else:
-        # generate random offset for first timeseries of the day to increase variability
-        next_start_time = random.randint(0, int(n_frames-1))
-        if verbose:
-            print(f"The trailing timeseries of previous day has missing data - move on with next day.", flush=verbose)
-            print("random start time", next_start_time, flush=verbose)
-
-    # reset from_previous_day to None
-    from_previous_day = None
-    
-    return from_previous_day, next_start_time
+                # save crop to a netcdf file
+                crop_timeseries_cm.to_netcdf(filepath_to_save, mode='w')
+                
+                if verbose:
+                    print(f"saved after {n_attempts} attempts to: ", filepath_to_save, flush=verbose)
 
 # %%
-def construct_timeseries_dataset(path_dir, basename, years, months, days, 
-                                 n_frames=8, max_temporal_overlap=0, max_daily_offset=None, 
+# main method to construct timeseries dataset
+def construct_timeseries_dataset(bucket_name, years, months, days, 
+                                 n_frames=8, max_daily_offset=None, 
                                  cropsize=100, max_spatial_overlap=0.25, max_cropping_attempts=10, 
                                  out_path=None, out_basename=None, verbose=False):
-    
+    """
+    Construct timeseries dataset by cropping out random samples
+    (4 per timestamp, one from each quadrant) and saving them as netcdf files.
+
+    :param bucket_name: Name of the S3 bucket
+    :param years: list of years to process
+    :param months: list of months to process
+    :param days: list of days to process
+    :param n_frames: Number of frames in each timeseries
+    :param max_daily_offset: Maximum daily random offset for the start of the timeseries on that day as a fraction of n_frames
+    :param cropsize: Size of the crops
+    :param max_spatial_overlap: Maximum spatial overlap between crops within the same timestamps
+    :param max_cropping_attempts: Maximum number of attempts to find a crop without NaN values
+    :param out_path: Path to save the crops
+    :param out_basename: Basename for the output files
+    :param verbose: If True, print detailed information
+    """
+    # make sure input is in correct format
+    if not isinstance(years, list): years = list(years)
+    if not isinstance(months, list): months = list(months)
+    if not isinstance(days, list): days = list(days)
+
     # get start time of this script
     start_time_script = time.time()
     # count days to estimate later runtime per day
@@ -280,35 +252,29 @@ def construct_timeseries_dataset(path_dir, basename, years, months, days,
             # loop over days
             for day in days:
                 # get filename of this day
-                file = f"{path_dir}/{year:04d}/{month:02d}/{basename}_{year:04d}-{month:02d}-{day:02d}.nc"
+                file = f"{get_bucket_prefix(bucket_name, year, month, day)}.nc"
+                print(file, flush=True)
 
                 # read in file from bucket if exists
-                my_obj = read_file(s3, file, S3_BUCKET_NAME)
+                my_obj = read_file(s3, file, bucket_name)
                 if my_obj is not None:
                     
                     # count days to estimate later runtime per day
                     count_days += 1
-                    print(file, flush=True)
 
                     # open dataset
                     with xr.open_dataset(io.BytesIO(my_obj)) as ds_day:
 
                         if from_previous_day is not None:
-                            # if trailing incomplete timeseries from previous day exists, process this first
-                            from_previous_day, start_time = process_trailing_timeseries_of_previous_day(from_previous_day, ds_day, n_frames,
-                                                                                                        cropsize, max_spatial_overlap, out_path, out_basename, 
-                                                                                                        max_cropping_attempts=max_cropping_attempts, verbose=verbose)
-                        else:
-                            # no trailing data of previous day -> generate random offset for first timeseries of the day to increase variability
-                            if max_daily_offset is not None:
-                                start_time = random.randint(0, round(max_daily_offset*n_frames)+1)
-                            else:
-                                if max_temporal_overlap is not None:
-                                    start_time = random.randint(0, int(n_frames-1))
-                                else:
-                                    start_time = random.randint(0, int(n_frames-1))
-                            if verbose:
-                                print("random start time", start_time, flush=verbose)
+                            # add the trailing timeseries of the previous day to the current day data and slice timeseries
+                            ds_day = xr.concat([from_previous_day, ds_day], dim='time')
+
+                        # no trailing data of previous day 
+                        # -> if max_daily_offset is given generate random offset for first timeseries of the day to increase variability
+                        start_time = 0 if max_daily_offset is None else random.randint(0, round(max_daily_offset*n_frames)+1)
+
+                        if verbose:
+                            print("random start time index", start_time, ds_day.isel(time=start_time).time.values, flush=verbose)
 
                         # loop over until the end of the day
                         while start_time < len(ds_day.time.values):
@@ -316,23 +282,29 @@ def construct_timeseries_dataset(path_dir, basename, years, months, days,
                             # find timeseries window without NaN values and next start time
                             ds_timeseries, start_time = search_timewindow_without_nan(ds_day, start_time, n_frames)
 
-                            # check if timeseries has expected length or if it is an incomplete last timeseries of the day
+                            # check if current timeseries has expected length or if it is an incomplete last timeseries of the day
                             if ds_timeseries is None:
+                                # if there is no valid timeseries left in the day - break the loop and move on to next day
                                 if verbose:
-                                    print(f"No trailing timeseries of day due to missing timestamps - move on to next day.", flush=verbose)
+                                    print(f"No trailing timeseries of current day due to missing timestamps - move on to next day.", flush=verbose)
                                 from_previous_day = None
                                 break
 
                             elif len(ds_timeseries.time.values) < n_frames or ds_timeseries is None:
+                                # if the current timeseries is incomplete, then this is the last of the current day 
+                                # -> save it and process it with the next day
                                 if verbose:
-                                    print(f"The last timeseries of the day is not complete - keep for next day.", flush=verbose)
+                                    print(f"The last timeseries of the day is not complete - process with next day.", flush=verbose)
                                 from_previous_day = ds_timeseries
                                 break
 
                             else:
+                                #if timeseries has expected length:
                                 # crop out random samples from all quadrants given size and save them as netcdf
                                 crop_and_save_from_all_quadrants(ds_timeseries, cropsize, max_spatial_overlap, out_path, out_basename,
                                                                 max_cropping_attempts=max_cropping_attempts, verbose=verbose)
+                                if verbose:
+                                    print("Processing timeseries from ", ds_timeseries.time.values[0], " to ", ds_timeseries.time.values[-1], flush=True)
 
         # print progress
         print("----------------------------------------------", flush=True)
@@ -346,33 +318,42 @@ def construct_timeseries_dataset(path_dir, basename, years, months, days,
     print(f"Total runtime: {runtime/60:.2f} minutes or {runtime/60/60:.2f} hours", flush=True)
     print(f"Runtime per day: {runtime/count_days:.2f} seconds or {runtime/count_days/60:.2f} minutes", flush=True)
 
-# %% 
-#Directory with the data to upload
-years = [2015]  # np.arange(2013, 2024, 1)
-months = [4]  # np.arange(4, 10, 1)
-days = [27, 28, 29]  # np.arange(1, 32, 1) #[9, 10, 11]
-path_dir = "/data/sat/msg/ml_train_crops/IR_108-WV_062-CMA_FULL_EXPATS_DOMAIN"
-basename = "merged_MSG_CMSAF"
+# %%
+if __name__ == "__main__":
 
+    # Initialize the S3 client (bucket)
+    print('Initializing S3 client for accessing Data Bucket...')
+    s3 = Initialize_s3_client()
 
-# parameters for temporal cropping
-n_frames = 8 #, 10, 12, 14, 16]
-max_temporal_overlap = 0.25  # one can either set a random overlap between subsequent timeseries or... (if negative it will result in a forced gap between timeseries)
-max_daily_offset = None  # one can set a random offset at the beginning of the day to introduce a randomness in the timeseries starting times
+    # which channel to use
+    CHANNEL = 'IR_108'
+    VMIN, VMAX = 200, 300
+    S3_BUCKET_NAME = 'expats-msg-training' 
 
-# parameters for random spatial cropping
-cropsize = 100
-max_spatial_overlap = 0.25
-max_cropping_attempts = 10
+    #Directory with the data to upload
+    years = [2015]  # np.arange(2013, 2024, 1)
+    months = [4]  # np.arange(4, 10, 1)
+    days = [27, 28, 29]  # np.arange(1, 32, 1) #[9, 10, 11]
 
-# where and how to save the crops
-out_path = None # "output/data/timeseries_crops"
-out_basename = None # "MSG_timeseries"
+    # parameters for temporal cropping
+    n_frames = 8 #, 10, 12, 14, 16]
+    max_daily_offset = 0.25  # one can set a random offset in percent of n_frames at the beginning of the day to introduce a randomness in the timeseries starting times
 
-verbose = False
+    # parameters for random spatial cropping
+    cropsize = 100
+    max_spatial_overlap = 0.25 # maximum allowed overlap of the crops among each other as fraction of the cropsize
+    max_cropping_attempts = 10 # maximum number of attempts to find a crop without NaN values
 
-# run preparation of timeseries dataset
-construct_timeseries_dataset(path_dir, basename, years, months, days, 
-                             n_frames, max_temporal_overlap, max_daily_offset, 
-                             cropsize, max_spatial_overlap, max_cropping_attempts, 
-                             out_path=out_path, out_basename=out_basename, verbose=verbose)
+    # where and how to save the crops
+    out_path = "output/data/timeseries_crops"
+    out_basename = "MSG_timeseries"
+
+    verbose = True
+
+    # run preparation of timeseries dataset
+    construct_timeseries_dataset(S3_BUCKET_NAME, years, months, days, 
+                                 n_frames, max_daily_offset, 
+                                 cropsize, max_spatial_overlap, max_cropping_attempts, 
+                                 out_path=out_path, out_basename=out_basename, verbose=verbose)
+
+# %%
