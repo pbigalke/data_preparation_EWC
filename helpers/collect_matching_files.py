@@ -1,3 +1,5 @@
+# script to collect matching files based on detectors and study periods
+# %%
 import glob
 import os
 import numpy as np
@@ -7,7 +9,15 @@ sys.path.append("..")
 import helpers.datetime_helper as hlp
 
 def get_mwcch_files_in_study_period(mwcch_directory, detectors, years, months=None, days=None):
+    """
+    Docstring for get_mwcch_files_in_study_period
     
+    :param mwcch_directory: Description
+    :param detectors: Description
+    :param years: Description
+    :param months: Description
+    :param days: Description
+    """
     if detectors is not None and not isinstance(detectors, list):
         detectors = [detectors]
     if years is not None and not isinstance(years, list):
@@ -89,38 +99,18 @@ def get_msg_daily_files_in_study_period(directory, years, months=None, days=None
 
     return all_files
 
-def get_file_at_msg_timestamp(directory, timestamp, msg_res=15):
-
-    dt = hlp.get_datetimestring_from_npdatetime(timestamp)
-
-    # read in all files in directory that are close to timestamp
-    files_to_check = glob.glob(f"{directory}/{dt[:4]}/{dt[4:6]}/{dt[6:8]}/{dt[:8]}*_E{dt[9:11]}*.nc")
-
-    closest_files = []
-    for f in files_to_check:
-        start_msg = int(dt[-4:])
-        end_msg = start_msg + msg_res if (int(dt[-2:])+msg_res) < 60 else start_msg + (40+msg_res)
-        start_data = int(os.path.basename(f).split('_')[1][1:])
-        end_data = int(os.path.basename(f).split('_')[2][1:])
-        if start_msg < start_data and start_data < end_msg \
-            or start_msg < end_data and end_data < end_msg:
-            closest_files.append(f)
-
-    return closest_files
-
 def get_closest_MSG_timestamps(npdatetime, which="closest", msg_res=15):
     """
     Get the closest or neighboring MSG timestamps for a given datetime or list of datetimes.
-    Args:
-        npdatetime (np.datetime64 or list of np.datetime64): The datetime(s).
-        which (str, optional): Specifies which timestamp to return. Options are:
+
+    :param npdatetime (np.datetime64 or list of np.datetime64): The datetime(s).
+    :param which (str, optional): Specifies which timestamp to return. Options are:
                                - "closest" (default): Rounds to the nearest MSG timestamp.
                                - "previous": Rounds down to the previous MSG timestamp.
                                - "following": Rounds up to the following MSG timestamp.
                                - "both": Returns both the previous and following MSG timestamp.
-        msg_res (int, optional): The MSG resolution in minutes. Defaults to 15 minutes.
-    Returns:
-        np.datetime64 or list of np.datetime64: The rounded datetime(s). If the input was a single datetime,
+    :param msg_res (int, optional): The MSG resolution in minutes. Defaults to 15 minutes.
+    :return: np.datetime64 or list of np.datetime64: The rounded datetime(s). If the input was a single datetime,
                                                 a single rounded datetime is returned. If the input was a list
                                                 of datetimes, a list of rounded datetimes is returned.
     """
