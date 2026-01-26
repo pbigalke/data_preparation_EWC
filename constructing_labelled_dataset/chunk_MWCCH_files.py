@@ -1,3 +1,6 @@
+# This script contains a function to chunk MWCCH files into groups based on MSG timeseries length. 
+# It is used in the procedure of the creation of labelled MSG timeseries datasets (see construct_labelled_timeseries.py).
+
 # %%
 import numpy as np
 import os
@@ -7,23 +10,30 @@ import matplotlib as mpl
 sys.path.append('..')
 import MWCCH_file_lists_for_studies as mwcch_list
 import readers.read_processed_MWCC_H as mwcch_read
-import matching_data.collect_matching_files as match
+import helpers.collect_matching_files as match
 
 
 # %%
+# main method to use for chunking MWCCH files into groups by MSG timeseries length
 def chunk_files_by_timerange(files, n_frames, msg_res, gap=15, start_match="following", chunk_match="previous"):
     """
-    Chunk MWCCH files that lie within a specified time range (given by n_frames*msg_res).
-    Each chunk will contain files that fall within the time range of the described MSG time series.
-    Parameters:
-    - files: list of MWCCH file paths
-    - n_frames: number of frames in the time series
-    - msg_res: temporal resolution of MSG data in minutes
-    - gap: minimum gap in minutes between the end of one time series and the start of the next
-    - start_match: method to match the start time of the time series to MSG timestamps ("following", "previous", "closest")
-    - chunk_match: method to match the files to the time range of the time series ("following", "previous", "closest")
-    Returns:
-    - chunks: list of lists, where each sublist contains file paths that belong to the same time series chunk
+    Chunk MWCCH files that lie within MSG timeseries length (given by n_frames*msg_res) to enable construction of labelled MSG timeseries.
+    The chunks are created going backwards in time, starting with the newest MWCCH file. 
+    This ensures that the MSG timeseries later created on the basis of the chunks are ENDING with the MWCCH hail information. 
+    All previous MWCCH files that lie within the timeseries length are grouped into the same chunk.
+
+    : param files: list of MWCCH file paths
+    : param n_frames: number of frames in the time series
+    : param msg_res: temporal resolution of MSG data in minutes
+    : param gap: minimum gap in minutes between the end of one time series and the start of the next
+    : param start_match: which MSG timestamp to use as reference for the end of the time series ("following", "previous", "closest"). 
+                         If "following", the time series will end at the next MSG timestamp after the MWCCH overpass,
+                         if "previous" it will end at the previous MSG timestamp before the MWCCH overpass, 
+                         if "closest" it will end at the closest MSG timestamp to the MWCCH overpass (either before or after).
+    : param chunk_match: In which direction to check if MWCCH overpass lies within same MSG timeseries so that it grouped together 
+                         with previous MWCCH overpasses ("following", "previous", "closest").
+    
+    : return chunks: list of lists, where each sublist contains file paths that belong to the same time series chunk
     """
     # Parse timestamps of scanning end time
     files_with_timestamps = [(file, mwcch_read.get_scan_datetime_from_mwcch_filepath(file, which="end")) for file in files]
@@ -42,46 +52,48 @@ def chunk_files_by_timerange(files, n_frames, msg_res, gap=15, start_match="foll
     # loop over all files
     for file, timestamp in files_with_timestamps:
 
-        # get corresponding MSG timestamps if this would be timeseries start
-        msg_last_frame = match.get_closest_MSG_timestamps(timestamp, which=start_match, msg_res=msg_res)
+        # get corresponding MSG timestamps if this would be timeseries' last frame
+        msg_timestamp_if_last_frame = match.get_closest_MSG_timestamps(timestamp, which=start_match, msg_res=msg_res)
         
-        # get corresponding MSG timestamps to check if this file is within the time range
-        msg_chunk_match = match.get_closest_MSG_timestamps(timestamp, which=chunk_match, msg_res=msg_res)
-
+        # get corresponding MSG timestamps to check if this file is within the time range to be chunked with previous files
+        msg_timestamp_chunk = match.get_closest_MSG_timestamps(timestamp, which=chunk_match, msg_res=msg_res)
 
         # check if this is the first file
         if current_start_time is None:
             # set current start time to corresponding MSG timestamp of the first file
-            current_start_time = msg_last_frame
+            current_start_time = msg_timestamp_if_last_frame
             # set respective end time
             current_end_time = current_start_time - timeseries_length
 
             # add file to current chunk
             current_chunk.append(file)
 
-        #check if file is within range of current chunk
-        elif (current_start_time - msg_chunk_match) <= timeseries_length:
-            # add file to current chunk
-            current_chunk.append(file)
-
         else:
-            # file is out of bound for previous chunk
 
-            # if current chunk is not empty, add it to final list
-            if current_chunk:
-                chunks.append(current_chunk)
+            # check if file is within range of current chunk
+            if (current_start_time - msg_timestamp_chunk) <= timeseries_length:
+                # add file to current chunk
+                current_chunk.append(file)
 
-            # check if gap of current file to previous timeseries is large enough to start new chunk
-            if (current_end_time - msg_last_frame) >= gap_length:
-                current_chunk = [file]
-                # set new start time to corresponding MSG timestamp of the current file
-                current_start_time = msg_last_frame
-                # set respective end time
-                current_end_time = current_start_time - timeseries_length
             else:
-                # do not start new chunk
-                current_chunk = []
+                # file is out of bound for previous chunk
 
+                # if current chunk is not empty, add it to final list
+                if current_chunk:
+                    chunks.append(current_chunk)
+
+                # check if gap of current file to previous timeseries is large enough to start new chunk
+                if (current_end_time - msg_timestamp_if_last_frame) >= gap_length:
+                    current_chunk = [file]
+                    # set new start time to corresponding MSG timestamp of the current file
+                    current_start_time = msg_timestamp_if_last_frame
+                    # set respective end time
+                    current_end_time = current_start_time - timeseries_length
+                else:
+                    # do not start new chunk
+                    current_chunk = []
+
+    # if list of current chunk is not empty, add it to final list
     if current_chunk:
         chunks.append(current_chunk)
 
@@ -89,7 +101,25 @@ def chunk_files_by_timerange(files, n_frames, msg_res, gap=15, start_match="foll
 
 # %%
 # some plotting functions to analyze chunking of MWCCH files
-def plot_numer_of_MWCCH_chunks_over_gap_per_areathresh(mwcch_path, years, months, n_frames, msg_res, plotpath, area_thresholds, gaps, start_match, chunk_match):
+# into MSG timeseries depending on different parameters
+
+def plot_numer_of_MWCCH_chunks_over_gap_per_areathresh(mwcch_path, years, months, n_frames, msg_res, plotpath, 
+                                                       area_thresholds, gaps, start_match, chunk_match):
+    """
+    Plot number of MWCCH chunks over different gaps, each subplot for a specific area threshold.
+    WARNING: this plotting function has not yet been adapted to reading the MWCCH files from S3 bucket!
+
+    :param mwcch_path: Path to MWCCH files
+    :param years: List of years to include
+    :param months: List of months to include
+    :param n_frames: Number of frames in each timeseries
+    :param msg_res: Resolution of MSG data in minutes
+    :param plotpath: Path to save the plot
+    :param area_thresholds: List of area thresholds to consider
+    :param gaps: List of gaps to consider
+    :param start_match: List of start match criteria
+    :param chunk_match: List of chunk match criteria
+    """
     fig, axes = plt.subplots(2, 4, figsize=(15, 10))
     plot_colors = ['r', 'g', 'b', 'c', 'm', 'y']
     n_max_files = 0
@@ -137,7 +167,23 @@ def plot_numer_of_MWCCH_chunks_over_gap_per_areathresh(mwcch_path, years, months
     plt.show()
     plt.close()
 
-def plot_number_of_MWCCH_chunks_over_areathreh_per_gap(mwcch_path, years, months, n_frames, msg_res, plotpath, area_thresholds, gaps, start_match, chunk_match):
+def plot_number_of_MWCCH_chunks_over_areathreh_per_gap(mwcch_path, years, months, n_frames, msg_res, plotpath, 
+                                                       area_thresholds, gaps, start_match, chunk_match):
+    """
+    Plot number of MWCCH chunks over different area thresholds, each subplot for a specific gap.
+    WARNING: this plotting function has not yet been adapted to reading the MWCCH files from S3 bucket!
+
+    :param mwcch_path: Path to MWCCH files
+    :param years: List of years to include
+    :param months: List of months to include
+    :param n_frames: Number of frames in each timeseries
+    :param msg_res: Resolution of MSG data in minutes
+    :param plotpath: Path to save the plot
+    :param area_thresholds: List of area thresholds to consider
+    :param gaps: List of gaps to consider
+    :param start_match: List of start match criteria
+    :param chunk_match: List of chunk match criteria
+    """
     fig, axes = plt.subplots(2, 3, figsize=(15, 10))
     plot_colors = ['r', 'g', 'b', 'c', 'm', 'y']
     n_max_files = 0
@@ -194,6 +240,18 @@ def plot_number_of_MWCCH_chunks_over_areathreh_per_gap(mwcch_path, years, months
     plt.close()
 
 def plot_chunksize_distribution_per_area_thresh(mwcch_path, years, months, n_frames, msg_res, plotpath, area_thresholds):
+    """
+    Plot distribution of chunk sizes per area threshold as heatmap.
+    WARNING: this plotting function has not yet been adapted to reading the MWCCH files from S3 bucket!
+    
+    :param mwcch_path: Path to MWCCH files
+    :param years: List of years to include
+    :param months: List of months to include
+    :param n_frames: Number of frames in each timeseries
+    :param msg_res: Resolution of MSG data in minutes
+    :param plotpath: Path to save the plot
+    :param area_thresholds: List of area thresholds to consider
+    """
     fig, ax = plt.subplots(1, figsize=(6, 4))
     ax.set_title(f"gap: 15 min, timeseries length: {n_frames} frames")
     
@@ -247,7 +305,23 @@ def plot_chunksize_distribution_per_area_thresh(mwcch_path, years, months, n_fra
 def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_bucket, years, months, n_frames, msg_res, 
                                                                      plotpath, area_thresholds, gaps, n_rows, n_cols,
                                                                      vmax=42500, vmin=5000, bin_width=2500):
+    """
+    Plot number of MWCCH chunks over different n_frames and gaps as heatmap, each subplot for a specific area threshold.
 
+    :param mwcch_bucket: S3 bucket name where MWCCH files are stored
+    :param years: List of years to include
+    :param months: List of months to include
+    :param n_frames: List of number of frames in each timeseries
+    :param msg_res: Resolution of MSG data in minutes
+    :param plotpath: Path to save the plot
+    :param area_thresholds: List of area thresholds to consider
+    :param gaps: List of gaps between timeseries in minutes
+    :param n_rows: Number of rows in the subplot grid
+    :param n_cols: Number of columns in the subplot grid
+    :param vmax: Maximum value for color scale
+    :param vmin: Minimum value for color scale
+    :param bin_width: Width of bins for color scale
+    """
     # find number of subplots needed
     n_subplots = len(area_thresholds)
     
@@ -335,7 +409,23 @@ def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_per_areathresh(mwcch_bucke
         plt.close()
 
 def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_for_specific_areathresh(mwcch_bucket, years, months, n_frames, msg_res, 
-                                                                     plotpath, area_thresh, gaps, vmax=42500, vmin=5000, bin_width=2500):    
+                                                                              plotpath, area_thresh, gaps, vmax=42500, vmin=5000, 
+                                                                              bin_width=2500):  
+    """
+    Plot number of MWCCH chunks over different n_frames and gaps as heatmap for one specific area threshold.
+
+    :param mwcch_bucket: S3 bucket name where MWCCH files are stored
+    :param years: List of years to include in the study
+    :param months: List of months to include in the study
+    :param n_frames: List of number of frames to consider
+    :param msg_res: Message resolution in minutes
+    :param plotpath: Path to save the plot
+    :param area_thresh: Area threshold to filter MWCCH files
+    :param gaps: List of gaps between timeseries in minutes
+    :param vmax: Maximum value for color scale
+    :param vmin: Minimum value for color scale
+    :param bin_width: Width of bins for color scale
+    """  
     # create figure and axes
     fig, ax = plt.subplots(1, 1, figsize=(15, 10))
 
@@ -404,6 +494,10 @@ def plot_number_of_MWCCH_chunks_over_n_frames_and_gap_for_specific_areathresh(mw
 # %%
 if __name__ == "__main__":
 
+    # Here we did some plotting to test the chunking of MWCCH files into MSG timeseries
+    # depending on different parameters such as area threshold, number of frames, gap between timeseries
+
+    # bucket and plot path settings
     mwcch_bucket = "mwcch-hail-regrid-msg"
     plotpath = "plots" #"/net/merisi/pbigalke/plots/data_investigation/constructing_dataset/chunking_MWCCH_files"
     # if not os.path.exists(plotpath):
