@@ -35,7 +35,6 @@ def read_file(s3, file_name, bucket):
     try:
         #with open(file_name, "rb") as f:
         obj = s3.get_object(Bucket=bucket, Key=file_name)
-        print(obj)
         myObject = obj['Body'].read()#.decode('utf-8')
     except ClientError as e:
         logging.error(e)
