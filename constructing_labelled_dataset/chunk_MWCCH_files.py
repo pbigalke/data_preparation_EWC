@@ -5,7 +5,7 @@
 import numpy as np
 import sys
 sys.path.append('..')
-import readers.read_processed_MWCC_H as mwcch_read
+import readers.read_processed_MWCCH as mwcch
 import helpers.collect_matching_files as match
 
 
@@ -32,7 +32,7 @@ def chunk_files_by_timerange(files, n_frames, msg_res, gap=15, start_match="foll
     : return chunks: list of lists, where each sublist contains file paths that belong to the same time series chunk
     """
     # Parse timestamps of scanning end time
-    files_with_timestamps = [(file, mwcch_read.get_scan_datetime_from_mwcch_filepath(file, which="end")) for file in files]
+    files_with_timestamps = [(file, mwcch.get_scan_datetime_from_mwcch_filepath(file, which="end")) for file in files]
 
     # sort files by timestamp in descending order
     files_with_timestamps.sort(key=lambda x: x[1], reverse=True)
