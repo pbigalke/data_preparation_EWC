@@ -8,8 +8,8 @@ import numpy as np
 import os
 import sys
 sys.path.append("..")
-import readers.read_processed_MWCC_H as mwcch_read
-from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client, list_objects_within_study_period, download_file
+import readers.read_processed_MWCCH as mwcch
+import data_buckets_IO.data_buckets_read_and_write as bucket
 # get current directory
 dir_name = os.path.dirname(__file__)
 
@@ -68,25 +68,17 @@ def create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area
             f.write(f"Files with area larger than {t}%\n")
 
     # get all files within study period
-    s3 = Initialize_s3_client()
-    mwcch_files = list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
-
-    # create temp local path
-    local_path = f"{dir_name}/temp_mwcch_files"
-    if not os.path.exists(local_path):
-        os.makedirs(local_path)
-    local_tmp_file = f"{local_path}/temp_file.nc"
+    s3 = bucket.Initialize_s3_client()
+    mwcch_files = bucket.list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
 
     # loop over files
     for f, file in enumerate(mwcch_files):
-        # download from bucket
-        download_file(s3, file, mwcch_bucket, local_tmp_file)
-        
-        # open as dataset
-        mwcch_data = mwcch_read.read(local_tmp_file, variables=["hail_class"]).hail_class.values
+
+        # read from bucket
+        mwcch_data = mwcch.read_mwcch_from_bucket(file, s3, variables=["hail_class"]).hail_class.values
 
         # get covered area percentage
-        area_perc = mwcch_read.area_percentage_covered_by_overpass(mwcch_data)
+        area_perc = mwcch.area_percentage_covered_by_overpass(mwcch_data)
 
         # check if area is larger than threshold
         for t in area_thresholds:
@@ -97,11 +89,6 @@ def create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area
 
         if f % 1000 == 0 and f > 0:
             print(f"{f}/{len(mwcch_files)} files viewed..", flush=True)
-
-    print(f"{len(mwcch_files)}/{len(mwcch_files)} files viewed..", flush=True)
-    # delete temp file and folder
-    os.remove(local_tmp_file)
-    os.rmdir(local_path)
 
 def read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days=np.arange(1, 32, 1), area_threshold=30):
     """
@@ -114,12 +101,6 @@ def read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days=np.ara
         days (list or int): List of days or single day
         area_threshold (int): Threshold for area coverage percentage
     """
-    # if area threshold is 0, return all files
-    if area_threshold == 0:
-        s3 = Initialize_s3_client()
-        files = list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
-        return files
-
     # get filename for given study settings
     filename = get_list_filename(years, months, days, area_threshold)
 
@@ -141,11 +122,11 @@ if __name__ == "__main__":
     mwcch_bucket = "mwcch-hail-regrid-msg"
     years = [2023]  # np.arange(2006, 2024, 1)
     months = [9]  # np.arange(4, 10, 1)
-    days = np.arange(1, 32, 1)
+    days = [30]  # np.arange(1, 32, 1)
     area_thresholds = [30]  # np.arange(0, 70, 10)
 
-    # create file list from study settings
-    create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
+    # # create file list from study settings
+    # create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
 
     # for area_threshold in area_thresholds:
     #     files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold)

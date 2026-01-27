@@ -4,17 +4,18 @@ import xarray as xr
 import numpy as np
 import re
 import os
+import io
 import sys
 sys.path.append("..")
-import helpers.collect_matching_files as clct
 import helpers.datetime_helper as hlp
+from data_buckets_IO.data_buckets_read_and_write import read_file
 
-MWCCH_PATH = "/data/sat/products/PMW_sats/MWCCH_hail_probability/netcdf"
-MWCCH_MSGGRID_PATH = "/data/sat/products/PMW_sats/MWCCH_hail_probability/netcdf_MSG_grid"
+# define MWCCH bucket name and all variables that are stored in the files
+MWCCH_BUCKET_NAME = "mwcch-hail-regrid-msg"
 ALL_VARS = ["datetime", "cloud_type", "TB", "POH", "hail_class"]
 
 # %%
-def read(file_path, variables=ALL_VARS):
+def read_mwcch_from_bucket(file_name, s3, bucket_name=MWCCH_BUCKET_NAME, variables=ALL_VARS):
     """ read processed MWCC-H output containing probability of hail
     """
     if not isinstance(variables, list):
@@ -23,9 +24,13 @@ def read(file_path, variables=ALL_VARS):
     # get variables to drop
     droplist = [var for var in ALL_VARS if var not in variables]
 
-    # read in dataset and drop variables that are not needed
-    with xr.open_dataset(file_path, engine="h5netcdf", drop_variables=droplist) as dataset:
-        return dataset
+    # get object from bucket
+    my_obj = read_file(s3, file_name, bucket_name)
+
+    # if object is not None open as xarray dataset
+    if my_obj is not None:
+        with xr.open_dataset(io.BytesIO(my_obj), drop_variables=droplist) as ds:
+            return ds
 
 # %%
 hail_class_dict = {
@@ -205,18 +210,39 @@ def generate_mwcch_filepath(path, start_dt, end_dt, detector, satellite, suffix=
 
 # %%
 if __name__ == '__main__':
-    import numpy as np
-    # test on example file
-    example_file = "mhs_METOPB_20230724-S1905-E2046_056289"
-    satellite = 'METOPB'
+
+    from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client, list_objects_within_study_period
+    # initialize s3 client
+    s3 = Initialize_s3_client()
+    # # define bucket name
+    # mwcch_bucket = MWCCH_BUCKET_NAME
+    # # define study period
+    # years = [2023]
+    # months = [9]
+    # days = [30]
+    # # get all files within study period
+    # mwcch_files = list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
+    # for f in mwcch_files:
+    #     print(f)
+
+    example_file = "2023/09/30/20230930_S1722_E1725_SSMIS_f17_MSGgrid.nc"
+    mwcch_obj = read_mwcch_from_bucket(example_file, s3, variables="POH")
+    print(mwcch_obj)
     
-    path = "/net/merisi/pbigalke/data/MWCC-H/netcdf"
-    years = [2022]
-    months = [6]
-    days = [5]
-    detectors = ["ATMS", "MHS", "SSMIS"]
-    all_files = clct.get_mwcch_files_in_study_period(path, detectors, years, months, days)
-    for f in all_files:
-        print(f)
+
+
+    # import numpy as np
+    # # test on example file
+    # example_file = "mhs_METOPB_20230724-S1905-E2046_056289"
+    # satellite = 'METOPB'
+    
+    # path = "/net/merisi/pbigalke/data/MWCC-H/netcdf"
+    # years = [2022]
+    # months = [6]
+    # days = [5]
+    # detectors = ["ATMS", "MHS", "SSMIS"]
+    # all_files = clct.get_mwcch_files_in_study_period(path, detectors, years, months, days)
+    # for f in all_files:
+    #     print(f)
 
 # %%
