@@ -14,6 +14,8 @@ sys.path.append('..')
 from data_buckets_IO.data_buckets_read_and_write import read_file, Initialize_s3_client
 from data_buckets_IO.bucket_information import get_bucket_prefix
 
+CHANNEL = 'IR_108'  # channel from which to crop the timeseries
+
 # %%
 # methods used to select crops and save them 
 def search_timewindow_without_nan(ds_day, start_time, n_frames, verbose=False):
