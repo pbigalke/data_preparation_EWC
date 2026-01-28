@@ -15,7 +15,7 @@ MWCCH_BUCKET_NAME = "mwcch-hail-regrid-msg"
 ALL_VARS = ["datetime", "cloud_type", "TB", "POH", "hail_class"]
 
 # %%
-def read_mwcch_from_bucket(file_name, s3, bucket_name=MWCCH_BUCKET_NAME, variables=ALL_VARS):
+def read_mwcch_from_bucket(file_name, s3, variables=ALL_VARS):
     """
     Read processed MWCC-H file from EWC bucket containing probability of hail and hail classes, etc.
     
@@ -33,7 +33,7 @@ def read_mwcch_from_bucket(file_name, s3, bucket_name=MWCCH_BUCKET_NAME, variabl
     droplist = [var for var in ALL_VARS if var not in variables]
 
     # get object from bucket
-    my_obj = read_file(s3, file_name, bucket_name)
+    my_obj = read_file(s3, file_name, MWCCH_BUCKET_NAME)
 
     # if object is not None open as xarray dataset
     if my_obj is not None:
@@ -41,19 +41,36 @@ def read_mwcch_from_bucket(file_name, s3, bucket_name=MWCCH_BUCKET_NAME, variabl
             return ds
 
 # %%
-# hail_class_dict = {
-#     0: "no_hail", 
-#     1: "hail_potential", 
-#     2: "hail_initiation_graupel", 
-#     3: "large_hail", 
-#     4: "super_hail", 
-# }
+def get_bucket_name():
+    """
+    Get the name of the MWCCH bucket.
 
-# def get_hail_classes(type="number"):
-#     if type == "number":
-#         return list(hail_class_dict.keys())
-#     elif type == "name":
-#         return list(hail_class_dict.values())
+    :return: Name of the MWCCH bucket.
+    :rtype: str
+    """
+    return MWCCH_BUCKET_NAME
+
+# define hail classes dictionary
+HAIL_CLASS_DICT = {
+    0: "no_hail", 
+    1: "hail_potential", 
+    2: "hail_initiation_graupel", 
+    3: "large_hail", 
+    4: "super_hail", 
+}
+
+def get_hail_classes(type="number"):
+    """
+    Get list of hail classes either as numbers or names.
+
+    :param type: whether to return "number" or "name" of hail classes.
+    :return: List of hail classes as numbers or names.
+    :rtype: list
+    """
+    if type == "number":
+        return list(HAIL_CLASS_DICT.keys())
+    elif type == "name":
+        return list(HAIL_CLASS_DICT.values())
     
 # def convert_POH_to_hail_class(poh, type="number"):
 #     # define hail classes, the entry np.NaN is assigned to poh=NaN
@@ -83,40 +100,65 @@ def read_mwcch_from_bucket(file_name, s3, bucket_name=MWCCH_BUCKET_NAME, variabl
 
 #     return hail_classes
 
-# def convert_hail_class(hail_class_values, to="name"):
-#     # which direction to convert
-#     if to == "number":
-#         # Create a reverse dictionary for name to number conversion
-#         reverse_hail_class_dict = {v: k for k, v in hail_class_dict.items()}
+def convert_hail_class(hail_class_values, to="name"):
+    """
+    Convert hail class values between number and name representation.
 
-#         # Define a vectorized function for conversion
-#         vectorized_conversion = np.vectorize(lambda x: reverse_hail_class_dict[x])
-#         hail_class_values = vectorized_conversion(hail_class_values)
+    :param hail_class_values: Array of hail class values, from e.g. an MWCCH file.    
+    :param to: Direction of conversion, either "number" or "name".
+    :return: Converted hail class values.
+    :rtype: np.ndarray
+    """
+    # which direction to convert
+    if to == "number":
+        # Create a reverse dictionary for name to number conversion
+        reverse_hail_class_dict = {v: k for k, v in HAIL_CLASS_DICT.items()}
+
+        # Define a vectorized function for conversion
+        vectorized_conversion = np.vectorize(lambda x: reverse_hail_class_dict[x])
+        hail_class_values = vectorized_conversion(hail_class_values)
     
-#     elif to == "name":
-#         # Define a vectorized function for conversion
-#         vectorized_conversion = np.vectorize(lambda x: hail_class_dict[x])
-#         hail_class_values = vectorized_conversion(hail_class_values)
+    elif to == "name":
+        # Define a vectorized function for conversion
+        vectorized_conversion = np.vectorize(lambda x: HAIL_CLASS_DICT[x])
+        hail_class_values = vectorized_conversion(hail_class_values)
     
-#     return hail_class_values
+    return hail_class_values
 
-# # get the maximum hail class in the hail class array
-# def max_hail_class(hail_class_values, min_pixel=1):
-#     for hail in get_hail_classes(type="number")[::-1]:
-#         if np.count_nonzero(hail_class_values == hail) >= min_pixel:
-#             return hail
-#     return None
+# get the maximum hail class in the hail class array
+def get_max_hail_class(hail_class_values, min_pixel=1):
+    """
+    Get the maximum hail class present in the hail class array, 
+    considering only classes with at least min_pixel occurrences.
 
-# # calculate area percentage covered by overpass from probability of hail values
-# def area_percentage_covered_by_overpass(poh_or_hail_class):
-#     # get total number of pixels
-#     N_pixel = poh_or_hail_class.shape[0] * poh_or_hail_class.shape[1]
-#     # get number of nan entries:
-#     N_nans = np.sum(np.isnan(poh_or_hail_class))
-#     # calculate area percentage covered by overpass
-#     area_perc = round((N_pixel-N_nans) / N_pixel * 100)
+    :param hail_class_values: Array of hail class values, from e.g. an MWCCH file.
+    :param min_pixel: Minimum number of pixels required to consider this hail class.
+    :return: Maximum hail class present in the array that meets the min_pixel requirement, or None if none found.
+    :rtype: int | None
+    """
+    # loop over hail classes from largest to smallest
+    for hail in get_hail_classes(type="number")[::-1]:
+        if np.count_nonzero(hail_class_values == hail) >= min_pixel:
+            return hail
+    return None
 
-#     return area_perc
+# calculate area percentage covered by overpass from probability of hail values or hail class values
+def area_percentage_covered_by_overpass(poh_or_hail_class):
+    """
+    Calculate percentage of EXPATS domain area covered by overpass from probability of hail values or hail class values.
+
+    :param poh_or_hail_class: Array of probability of hail values or hail class values.
+    :return: Area percentage covered by overpass (float).
+    :rtype: float
+    """
+    # get total number of pixels
+    N_pixel = poh_or_hail_class.shape[0] * poh_or_hail_class.shape[1]
+    # get number of nan entries:
+    N_nans = np.sum(np.isnan(poh_or_hail_class))
+    # calculate area percentage covered by overpass
+    area_perc = round((N_pixel-N_nans) / N_pixel * 100)
+
+    return area_perc
 
 # # %%
 # # functions to extract information from file path
@@ -238,38 +280,13 @@ def get_datestring_from_mwcch_filepath(file_path):
 # %%
 if __name__ == '__main__':
 
-    from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client, list_objects_within_study_period
+    from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client
     # initialize s3 client
     s3 = Initialize_s3_client()
-    # # define bucket name
-    # mwcch_bucket = MWCCH_BUCKET_NAME
-    # # define study period
-    # years = [2023]
-    # months = [9]
-    # days = [30]
-    # # get all files within study period
-    # mwcch_files = list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
-    # for f in mwcch_files:
-    #     print(f)
 
     example_file = "2023/09/30/20230930_S1722_E1725_SSMIS_f17_MSGgrid.nc"
     mwcch_obj = read_mwcch_from_bucket(example_file, s3, variables="POH")
     print(mwcch_obj)
     
-
-
-    # import numpy as np
-    # # test on example file
-    # example_file = "mhs_METOPB_20230724-S1905-E2046_056289"
-    # satellite = 'METOPB'
-    
-    # path = "/net/merisi/pbigalke/data/MWCC-H/netcdf"
-    # years = [2022]
-    # months = [6]
-    # days = [5]
-    # detectors = ["ATMS", "MHS", "SSMIS"]
-    # all_files = clct.get_mwcch_files_in_study_period(path, detectors, years, months, days)
-    # for f in all_files:
-    #     print(f)
 
 # %%

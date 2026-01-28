@@ -10,6 +10,7 @@ import sys
 sys.path.append("..")
 import readers.read_processed_MWCCH as mwcch
 import data_buckets_IO.data_buckets_read_and_write as bucket
+from readers.read_processed_MWCCH import get_bucket_name
 # get current directory
 dir_name = os.path.dirname(__file__)
 
@@ -49,13 +50,12 @@ def get_list_filename(years, months, days, area_threshold):
 
     return output_file_name
 
-def create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=[10, 20, 30, 40, 50, 60]):
+def create_file_list_per_area_thresholds(years, months, days, area_thresholds=[10, 20, 30, 40, 50, 60]):
     """
     collect all files within given study period and then for each area threshold, save those with area larger 
     than the threshold to a respective txt file.
 
     Args:
-        mwcch_bucket (str): S3 bucket name where MWCCH files are stored
         years (list or int): List of years or single year
         months (list or int): List of months or single month
         days (list or int): List of days or single day
@@ -69,7 +69,7 @@ def create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area
 
     # get all files within study period
     s3 = bucket.Initialize_s3_client()
-    mwcch_files = bucket.list_objects_within_study_period(s3, mwcch_bucket, years, months, days)
+    mwcch_files = bucket.list_objects_within_study_period(s3, get_bucket_name(), years, months, days)
 
     # loop over files
     for f, file in enumerate(mwcch_files):
@@ -90,12 +90,11 @@ def create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area
         if f % 1000 == 0 and f > 0:
             print(f"{f}/{len(mwcch_files)} files viewed..", flush=True)
 
-def read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days=np.arange(1, 32, 1), area_threshold=30):
+def read_mwcch_files_for_study_settings(years, months, days=np.arange(1, 32, 1), area_threshold=30):
     """
     Read MWCCH files for given study settings from pre-created file lists.
     If the file list does not exist, a warning is printed and the file list is first created.
     Args:
-        mwcch_bucket (str): S3 bucket name where MWCCH files are stored
         years (list or int): List of years or single year
         months (list or int): List of months or single month
         days (list or int): List of days or single day
@@ -106,10 +105,10 @@ def read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days=np.ara
 
     # check if file exists
     if not os.path.exists(filename):
-        print(f"File {filename} \ndoes not exist yet. " + \
-              "The respective file list is now being created for these study settings.")
+        print(f"\nFile {filename} \ndoes not exist yet. " + \
+              "The respective file list is now being created for these study settings.\n")
         # if it does not exist, create it
-        create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=[area_threshold])
+        create_file_list_per_area_thresholds(get_bucket_name(), years, months, days, area_thresholds=[area_threshold])
     
     # read file lines
     with open(filename, 'r') as file:
@@ -121,12 +120,15 @@ if __name__ == "__main__":
     # study settings
     mwcch_bucket = "mwcch-hail-regrid-msg"
     years = [2023]  # np.arange(2006, 2024, 1)
-    months = [9]  # np.arange(4, 10, 1)
-    days = [30]  # np.arange(1, 32, 1)
+    months = [7]  # np.arange(4, 10, 1)
+    days = [24]  # np.arange(1, 32, 1)
     area_thresholds = [30]  # np.arange(0, 70, 10)
 
-    # # create file list from study settings
+    # create file list from study settings
     # create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
+    files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold=30)
+    for file in files:
+        print(file)
 
     # for area_threshold in area_thresholds:
     #     files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold)
