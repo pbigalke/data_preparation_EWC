@@ -1,6 +1,15 @@
-# This script constructs a labelled MSG timeseries dataset from MWCC-H chunks.
-# It reads MWCC-H files from an S3 bucket, groups them into timeseries,
-# extracts corresponding MSG data, crops it over hail areas, and saves the labelled dataset.
+# This script constructs an MSG timeseries dataset labelled with hail information from MWCCH overpasses.
+# The study settings such as period, MSG timeseries parameters, cropping size, and MWCC-H filters
+# are defined in the config/study_settings.py file and need to be adapted there as required (or saved in a new file).
+#
+# The procedure is as follows:
+# - read in MWCC-H files from an S3 bucket and group them if they lie within the same MSG timeseries length
+# - for each group, read in the last MWCC-H file to determine the hail label
+# - extract the corresponding MSG timeseries ending at the MWCC-H overpass time
+# - crop the MSG timeseries over the hail area (or overpass area if no hail occurs)
+# - save the cropped MSG timeseries with the respective hail label to a netCDF file
+#
+# The output is organized in folders named after the hail class labels.
 # When processing large datasets, ensure sufficient storage and memory are available.
 # Runtime for one example month (~200 timeseries) is approximately 2 minutes on EWC.
 # %%
@@ -20,35 +29,46 @@ import helpers.collect_matching_files as match
 import helpers.datetime_helper as hlp
 from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client
 
+
 # %%
 def main():
+    """
+    Main method to construct labelled MSG timeseries dataset from MWCC-H chunks.
+
+    NOTE: 
+    Study settings are defined in config/study_settings.py and can be adapted there. 
+    If different study settings should be used, either modify that file 
+    or create a new study settings file and adapt the import statement below.
+    """
+    import config.study_settings as settings
+
     # example on how to run the script
     start_script_at = datetime.datetime.now()
 
     # study period
-    years = [2023]  # np.arange(2006, 2024, 1)
-    months = [7]  # np.arange(4, 10, 1)
-    days = np.arange(1, 32, 1)
+    years = settings.years
+    months = settings.months
+    days = settings.days
     print(f"study period: {years}, {months}, {days if len(days)==1 else f'days {days[0]}-{days[-1]}'}")
     
     # MWCC-H filters
-    area_threshold = 30  # area coverage threshold in percentage of whole EXPATS domain
+    area_threshold = settings.area_threshold  # area coverage threshold in percentage of whole EXPATS domain
     print("area threshold: ", area_threshold)
-    min_pix = 5  # minimum number of pixels in maximum hail class for qualifying as hail class label
+    min_pix = settings.min_pix  # minimum number of pixels in maximum hail class for qualifying as hail class label
 
     # time series settings
-    msg_res = 15  # MSG resolution in minutes
-    msg_channels = ["IR_108"]  # MSG channel to be used
-    n_frames = 4  # number of frames
-    gap = 15  # Gap between subsequent timeseries in minutes (if negative results in overlapping timeseries)
+    msg_res = settings.msg_res  # MSG resolution in minutes
+    msg_channels = settings.msg_channels  # MSG channel to be used
+    n_frames = settings.n_frames  # number of frames
+    gap = settings.gap  # Gap between subsequent timeseries in minutes (if negative results in overlapping timeseries)
     print(f"MSG timeseries settings: resolution {msg_res}, n_frames {n_frames}, gap {gap}")
 
     # cropping settings
-    cropsize = 128  # size of square crop in pixels
+    cropsize = settings.cropsize  # size of square crop in pixels
     print(f"crop settings: cropsize {cropsize}")
 
     # Output path for labelled dataset
-    out_path = "/data/labelled_datasets" # f"/net/merisi/pbigalke/data/labelled_MSG_timeseries"
+    out_path = settings.out_path # f"/net/merisi/pbigalke/data/labelled_MSG_timeseries"
 
     # run construction of labelled MSG timeseries from MWCC-H chunks
     construct_labelled_MSG_timeseries_from_MWCCH_chunks(out_path, years, months, days, 
