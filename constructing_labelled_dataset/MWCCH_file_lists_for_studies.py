@@ -15,6 +15,34 @@ from readers.read_processed_MWCCH import get_bucket_name
 dir_name = os.path.dirname(__file__)
 
 # %%
+# main function to read a list of MWCCH files for given study settings
+def read_mwcch_files_for_study_settings(years, months, days=np.arange(1, 32, 1), area_threshold=30):
+    """
+    Read MWCCH files for given study settings from pre-created file lists.
+    If the file list does not exist, a warning is printed and the file list is first created.
+    Args:
+        years (list or int): List of years or single year
+        months (list or int): List of months or single month
+        days (list or int): List of days or single day
+        area_threshold (int): Threshold for area coverage percentage
+    """
+    # get filename for given study settings
+    filename = get_list_filename(years, months, days, area_threshold)
+
+    # check if file exists
+    if not os.path.exists(filename):
+        print(f"\nFile {filename} \ndoes not exist yet. " + \
+              "The respective file list is now being created for these study settings.\n")
+        # if it does not exist, create it
+        create_file_list_per_area_thresholds(get_bucket_name(), years, months, days, area_thresholds=[area_threshold])
+    
+    # read file lines
+    with open(filename, 'r') as file:
+        lines = file.readlines()[1:]  # Read all lines and skip the first one
+    return [line.strip() for line in lines]  # Strip newline characters
+
+# %%
+# function to create file lists for given study settings and area thresholds
 def get_list_filename(years, months, days, area_threshold):
     """
     Returns the filename for the list of files for given study settings
@@ -90,50 +118,5 @@ def create_file_list_per_area_thresholds(years, months, days, area_thresholds=[1
         if f % 1000 == 0 and f > 0:
             print(f"{f}/{len(mwcch_files)} files viewed..", flush=True)
 
-def read_mwcch_files_for_study_settings(years, months, days=np.arange(1, 32, 1), area_threshold=30):
-    """
-    Read MWCCH files for given study settings from pre-created file lists.
-    If the file list does not exist, a warning is printed and the file list is first created.
-    Args:
-        years (list or int): List of years or single year
-        months (list or int): List of months or single month
-        days (list or int): List of days or single day
-        area_threshold (int): Threshold for area coverage percentage
-    """
-    # get filename for given study settings
-    filename = get_list_filename(years, months, days, area_threshold)
-
-    # check if file exists
-    if not os.path.exists(filename):
-        print(f"\nFile {filename} \ndoes not exist yet. " + \
-              "The respective file list is now being created for these study settings.\n")
-        # if it does not exist, create it
-        create_file_list_per_area_thresholds(get_bucket_name(), years, months, days, area_thresholds=[area_threshold])
-    
-    # read file lines
-    with open(filename, 'r') as file:
-        lines = file.readlines()[1:]  # Read all lines and skip the first one
-    return [line.strip() for line in lines]  # Strip newline characters
-
-# %%
-if __name__ == "__main__":
-    # study settings
-    mwcch_bucket = "mwcch-hail-regrid-msg"
-    years = [2023]  # np.arange(2006, 2024, 1)
-    months = [7]  # np.arange(4, 10, 1)
-    days = [24]  # np.arange(1, 32, 1)
-    area_thresholds = [30]  # np.arange(0, 70, 10)
-
-    # create file list from study settings
-    # create_file_list_per_area_thresholds(mwcch_bucket, years, months, days, area_thresholds=area_thresholds)
-    files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold=30)
-    for file in files:
-        print(file)
-
-    # for area_threshold in area_thresholds:
-    #     files = read_mwcch_files_for_study_settings(mwcch_bucket, years, months, days, area_threshold)
-    #     if files is None:
-    #         continue
-    #     print("area threshold:", area_threshold, "# files:", len(files))
 
 # %%

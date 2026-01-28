@@ -1,6 +1,6 @@
+# Description: Functions to read MSG files from EXPATS bucket and extract useful information
 # %%
 import xarray as xr
-import os
 import io
 import sys
 sys.path.append('..')
@@ -13,6 +13,7 @@ CHANNELS = ["IR_016", "IR_039", "IR_087", "IR_097", "IR_108", "IR_120", "IR_134"
             "VIS006", "VIS008", "WV_062", "WV_073"]
 
 # %%
+# main function to read MSG files from EXPATS bucket
 def read_MSG_from_bucket(msg_file, s3, channels=CHANNELS):
     """
     Read MSG file from bucket and return xarray dataset
@@ -35,31 +36,8 @@ def read_MSG_from_bucket(msg_file, s3, channels=CHANNELS):
         with xr.open_dataset(io.BytesIO(my_obj), drop_variables=droplist) as ds:
             return ds
 
-# def get_y_m_d_from_filepath(msg_file):
-#     """Extract year, month and day from MSG file path
-
-#     Args:
-#         msg_file (pathlike): path to MSG file
-
-#     Returns:
-#         str, str, str: year, month, day
-#     """
-#     name = os.path.basename(msg_file)
-#     date = name.split('_')[0]
-#     return date[:4], date[4:6], date[6:]
-
-# def get_lon_lat():
-#     """Get longitude and latitude values of regular gridded MSG files given in MSG_PATH
-
-#     Returns:
-#         np.array(float), np.array(float): longitude and latitude values
-#     """
-#     MSG_example_file = f"{MSG_PATH}/2023/09/20230930-EXPATS-RG.nc"
-#     with xr.open_dataset(MSG_example_file, drop_variables=CHANNELS) as dataset:
-#         lon = dataset.lon.values
-#         lat = dataset.lat.values
-#     return lon, lat
-
+# %%
+# function to get MSG file from timestamp
 def get_MSG_file_from_timestamp(msg_dt):
     """
     Get MSG file from timestamp

@@ -1,13 +1,11 @@
-
+# Description: Functions to read processed MWCCH files from EWC bucket and extract and calculate useful information
 # %%
 import xarray as xr
 import numpy as np
 import re
-import os
 import io
 import sys
 sys.path.append("..")
-import helpers.datetime_helper as hlp
 from data_buckets_IO.data_buckets_read_and_write import read_file
 
 # define MWCCH bucket name and all variables that are stored in the files
@@ -15,6 +13,7 @@ MWCCH_BUCKET_NAME = "mwcch-hail-regrid-msg"
 ALL_VARS = ["datetime", "cloud_type", "TB", "POH", "hail_class"]
 
 # %%
+# main function to read MWCCH files from EWC bucket
 def read_mwcch_from_bucket(file_name, s3, variables=ALL_VARS):
     """
     Read processed MWCC-H file from EWC bucket containing probability of hail and hail classes, etc.
@@ -41,6 +40,7 @@ def read_mwcch_from_bucket(file_name, s3, variables=ALL_VARS):
             return ds
 
 # %%
+# functions to get information about MWCCH files and hail classes
 def get_bucket_name():
     """
     Get the name of the MWCCH bucket.
@@ -50,7 +50,6 @@ def get_bucket_name():
     """
     return MWCCH_BUCKET_NAME
 
-# define hail classes dictionary
 HAIL_CLASS_DICT = {
     0: "no_hail", 
     1: "hail_potential", 
@@ -58,7 +57,6 @@ HAIL_CLASS_DICT = {
     3: "large_hail", 
     4: "super_hail", 
 }
-
 def get_hail_classes(type="number"):
     """
     Get list of hail classes either as numbers or names.
@@ -71,34 +69,6 @@ def get_hail_classes(type="number"):
         return list(HAIL_CLASS_DICT.keys())
     elif type == "name":
         return list(HAIL_CLASS_DICT.values())
-    
-# def convert_POH_to_hail_class(poh, type="number"):
-#     # define hail classes, the entry np.NaN is assigned to poh=NaN
-#     if type == "name":
-#         hail_classes = ["no_hail", 
-#                         "hail_potential", 
-#                         "hail_initiation_graupel", 
-#                         "large_hail", 
-#                         "super_hail", 
-#                         np.NaN]
-#     else:
-#         hail_classes = [0, 1, 2, 3, 4, np.NaN]
-    
-#     # if only one values is given
-#     if isinstance(poh, float):
-#         poh = np.array(poh)
-
-#     # define boundaries of hail classes
-#     boundaries = [0, 0.2, 0.36, 0.45, 0.6, 1.01]
-
-#     # search for hail class corresponding to given poh
-#     idx = np.searchsorted(boundaries, poh.ravel(), side='right') - 1
-#     hail_classes = np.take(hail_classes, idx)
-
-#     # reshape into original shape
-#     hail_classes = hail_classes.reshape(poh.shape)
-
-#     return hail_classes
 
 def convert_hail_class(hail_class_values, to="name"):
     """
@@ -125,7 +95,6 @@ def convert_hail_class(hail_class_values, to="name"):
     
     return hail_class_values
 
-# get the maximum hail class in the hail class array
 def get_max_hail_class(hail_class_values, min_pixel=1):
     """
     Get the maximum hail class present in the hail class array, 
@@ -142,7 +111,6 @@ def get_max_hail_class(hail_class_values, min_pixel=1):
             return hail
     return None
 
-# calculate area percentage covered by overpass from probability of hail values or hail class values
 def area_percentage_covered_by_overpass(poh_or_hail_class):
     """
     Calculate percentage of EXPATS domain area covered by overpass from probability of hail values or hail class values.
@@ -160,19 +128,8 @@ def area_percentage_covered_by_overpass(poh_or_hail_class):
 
     return area_perc
 
-# # %%
-# # functions to extract information from file path
-# def get_y_m_d_from_mwcch_filepath(file_path):
-#     # get date string
-#     date = get_datestring_from_mwcch_filepath(file_path)
-
-#     # extract date from filename
-#     year = int(date[:4])
-#     month = int(date[4:6])
-#     day = int(date[6:])
-
-#     return year, month, day
-
+# %%
+# functions to extract information from file path
 def get_scan_datetime_from_mwcch_filepath(file_path, which="both"):
     """
     Extract scanning start and/or end datetime from MWCCH file path.
@@ -243,50 +200,5 @@ def get_datestring_from_mwcch_filepath(file_path):
     else:
         raise ValueError("Date pattern not found in filename")
 
-# def get_satellite(file_path=None):
-#     satellites = ['meto01', 'meto02', 'meto03', 'noaa15', 'noaa16', 'noaa17', 'noaa18', 'noaa19', 
-#                   'n20', 'n21', 'npp', 'f16', 'f17', 'gpm']
-#     if file_path is None:
-#         return satellites
-    
-#     for sat in satellites:
-#         if sat in file_path.lower():
-#             return sat
-#     return None
-
-# def get_detector_from_mwcch_filepath(file_path):
-#     detectors = ['ATMS', 'MHS', 'SSMIS', 'GMI']
-#     for det in detectors:
-#         if det.lower() in file_path.lower():
-#             return det
-#     return None
-
-# def generate_mwcch_filepath(path, start_dt, end_dt, detector, satellite, suffix=""):
-#     # get date string from start datetime
-#     date_string = hlp.get_datestring_from_npdatetime(start_dt)
-
-#     # get starting and end time within our domain
-#     start_time = f"S{hlp.get_timestring_from_npdatetime(start_dt)}"
-#     end_time = f"E{hlp.get_timestring_from_npdatetime(end_dt)}"
-    
-#     # define netcdf file name
-#     date_path = f"{path}/{date_string[:4]}/{date_string[4:6]}/{date_string[6:]}"
-#     if not os.path.exists(date_path):
-#         os.makedirs(date_path)
-#     file_path = f"{date_path}/{date_string}_{start_time}_{end_time}_{detector}_{satellite}{suffix}.nc"
-    
-#     return file_path
-
-# %%
-if __name__ == '__main__':
-
-    from data_buckets_IO.data_buckets_read_and_write import Initialize_s3_client
-    # initialize s3 client
-    s3 = Initialize_s3_client()
-
-    example_file = "2023/09/30/20230930_S1722_E1725_SSMIS_f17_MSGgrid.nc"
-    mwcch_obj = read_mwcch_from_bucket(example_file, s3, variables="POH")
-    print(mwcch_obj)
-    
 
 # %%
