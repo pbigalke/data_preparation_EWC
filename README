@@ -1,0 +1,20 @@
+This Repository can be found here: https://github.com/pbigalke/data_preparation_EWC.git
+It contains code to generate 2 different timeseries datasets: the random timeseries (see /timeseries_data_preparation) 
+and one that is labelled with hail information (see /constructing_labelled_dataset).
+
+**/constructing_labelled_dataset**
+Contains all the code to generate labelled MSG timeseries by matching with the MWCCH-overpasses and crop over the hail areas.
+Note: There is another README file in here that explains it a bit more detailed.
+
+**/data_buckets_IO**
+Contains scripts to read from and write to the S3 data buckets from the European Weather Cloud.
+
+**/helpers**
+Contains some helper functions to convert datetime to strings and to match different data to each other.
+
+**/readers**
+Contains methods to read and extract information for different data sources.
+
+**/timeseries_data_preparation**
+Contains all the code to generate random MSG timeseries. 
+Note: There is another README file in here that explains it a bit more detailed.

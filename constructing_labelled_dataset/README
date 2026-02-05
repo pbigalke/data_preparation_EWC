@@ -1,0 +1,30 @@
+This folder contains scripts that generate a satellite timesereies dataset labelled by hail class.
+The timeseries consist of MSG 10.8 micrometer channel. The crops are created over the area where the maximum hail class occurs 
+(or if no hail is present centered over the overpass areas). This maximum hail class is assigned as label to the cropped timeseries.
+The timeseries are created in such a way that they end with an additional PMW overpass which carries the hail information.
+
+**/config/study_settings.py**
+File where the study settings are stored. This needs to be adapted here as they are read in automatically.
+
+**construct_labelled_timeseries.py**
+This is the main script to generate the labelled timeseries. When running, everything is generated automatically.
+The procedure is as follows:
+1. Define your study settings in /config/study_settings.py
+2. Run construct_labelled_timeseries.py
+
+**chunk_MWCCH_files.py**
+This script contains a function to chunk MWCCH files into groups based on MSG timeseries length. 
+It is used in the procedure of the creation of labelled MSG timeseries datasets (see construct_labelled_timeseries.py).
+
+**MWCCH_file_lists_for_studies.py:**
+This script creates lists of MWCCH hail probability data files that meet certain criteria. 
+For one thing you can extract files for a certain study period (years, months, days).
+And for another thing you can set a specific area coverage threshold, so then the list contains 
+only files of those overpasses covering at least that percentage of the total EXPATS domain area.
+It allows for efficient retrieval of files that meet certain criteria for further analysis.  
+
+**crop_over_hail_or_overpass.py**
+Contains methods to crop the MSG timeseries over the maximum hail area.
+
+**plot_chunking_MWCCH_files.py**
+Some plots to visualise the number of MWCCH group representing the number of timeseries that can be generated for different study settings.
